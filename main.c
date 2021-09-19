@@ -1,6 +1,9 @@
+#include <stdbool.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "pool.h"
 
 #define MAX_CHARS 128
 
@@ -11,6 +14,34 @@ int echo(int argc, char *argv[]) {
         printf("%s%c", argv[i], i == argc - 1 ? '\n' : ' ');
     }
     return argc - 1;
+
+
+static int g_retcode;
+
+#define APPS_X(X) \
+        X(echo) \
+        X(retcode) \
+        X(pooltest) \
+
+
+#define DECLARE(X) static int X(int, char *[]);
+APPS_X(DECLARE)
+#undef DECLARE
+
+static const struct app {
+        const char *name;
+        int (*fn)(int, char *[]);
+} app_list[] = {
+#define ELEM(X) { # X, X },
+        APPS_X(ELEM)
+#undef ELEM
+};
+
+static int echo(int argc, char *argv[]) {
+	for (int i = 1; i < argc; ++i) {
+		printf("%s%c", argv[i], i == argc - 1 ? '\n' : ' ');
+	}
+	return argc - 1;
 }
 
 int retcode(int argc, char *argv[]) {
