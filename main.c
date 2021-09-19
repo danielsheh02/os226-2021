@@ -1,71 +1,116 @@
+#include <stdbool.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
-#define MAX_CHARS 128
+#include "pool.h"
 
-static int ret_code = 0;
+static int g_retcode;
 
-int echo(int argc, char *argv[]) {
+#define APPS_X(X) \
+        X(echo) \
+        X(retcode) \
+        X(pooltest) \
+
+
+#define DECLARE(X) static int X(int, char *[]);
+
+APPS_X(DECLARE)
+
+#undef DECLARE
+
+static const struct app {
+    const char *name;
+
+    int (*fn)(int, char *[]);
+} app_list[] = {
+#define ELEM(X) { # X, X },
+        APPS_X(ELEM)
+#undef ELEM
+};
+
+static int echo(int argc, char *argv[]) {
     for (int i = 1; i < argc; ++i) {
         printf("%s%c", argv[i], i == argc - 1 ? '\n' : ' ');
     }
     return argc - 1;
 }
 
-int retcode(int argc, char *argv[]) {
-    printf("%d\n", ret_code);
+static int retcode(int argc, char *argv[]) {
+    printf("%d\n", g_retcode);
     return 0;
 }
 
-int command_exec(char **words, int count_words) {
-    if (!strcmp(words[0], "echo")) {
-        return echo(count_words, words);
-    } else if (!strcmp(words[0], "retcode")) {
-        return retcode(count_words, words);
-    } else {
-        return -1;
+static int exec(int argc, char *argv[]) {
+    const struct app *app = NULL;
+    for (int i = 0; i < ARRAY_SIZE(app_list); ++i) {
+        if (!strcmp(argv[0], app_list[i].name)) {
+            app = &app_list[i];
+            break;
+        }
+    }
+
+    if (!app) {
+        printf("Unknown command\n");
+        return 1;
+    }
+
+    g_retcode = app->fn(argc, argv);
+    return g_retcode;
+}
+
+static int pooltest(int argc, char *argv[]) {
+    struct obj {
+        void *field1;
+        void *field2;
+    };
+    static struct obj objmem[4];
+    static struct pool objpool = POOL_INITIALIZER_ARRAY(objmem);
+
+    if (!strcmp(argv[1], "alloc")) {
+        struct obj *o = pool_alloc(&objpool);
+        printf("alloc %ld\n", o ? (o - objmem) : -1);
+        return 0;
+    }
+    else if (!strcmp(argv[1], "free")) {
+        int iobj = atoi(argv[2]);
+        printf("free %d\n", iobj);
+        pool_free(&objpool, objmem + iobj);
+        return 0;
     }
 }
 
-void parse_string(char **command, int count_strings) {
-    char **words = NULL;
-    for (int i = 0; i < count_strings; i++) {
-        char *word = strtok(command[i], " ");
-        int count_words = 0;
-        while (word != NULL) {
-            words = realloc(words, (count_words + 1) * sizeof(char *));
-            words[count_words] = word;
-            word = strtok(NULL, " ");
-            count_words++;
+int shell(int argc, char *argv[]) {
+    char line[256];
+    while (fgets(line, sizeof(line), stdin)) {
+        const char *comsep = "\n;";
+        char *stcmd;
+        char *cmd = strtok_r(line, comsep, &stcmd);
+        while (cmd) {
+            const char *argsep = " ";
+            char *starg;
+            char *arg = strtok_r(cmd, argsep, &starg);
+            char *argv[256];
+            int argc = 0;
+            while (arg) {
+                argv[argc++] = arg;
+                arg = strtok_r(NULL, argsep, &starg);
+            }
+            argv[argc] = NULL;
+
+            if (!argc) {
+                break;
+            }
+
+            exec(argc, argv);
+
+            cmd = strtok_r(NULL, comsep, &stcmd);
         }
-        ret_code = command_exec(words, count_words);
     }
-    free(words);
+    return 0;
 }
 
-int input_string() {
-    while (1) {
-        char *string = calloc(MAX_CHARS, sizeof(char));
-        char **buffer = NULL;
-        if (fgets(string, MAX_CHARS, stdin) == NULL) {
-            return 0;
-        }
-        char *command = strtok(string, ";\n");
-        int count_strings = 0;
-        while (command != NULL) {
-            buffer = realloc(buffer, (count_strings + 1) * sizeof(char *));
-            buffer[count_strings] = command;
-            count_strings++;
-            command = strtok(NULL, ";\n");
-        }
-        parse_string(buffer, count_strings);
-        free(string);
-        free(buffer);
-    }
-}
 
 int main(int argc, char *argv[]) {
-    input_string();
-    return 0;
+    shell(0, NULL);
 }
