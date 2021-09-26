@@ -1,8 +1,10 @@
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "usyscall.h"
 #include "pool.h"
 
 static int g_retcode;
@@ -11,17 +13,14 @@ static int g_retcode;
         X(echo) \
         X(retcode) \
         X(pooltest) \
-
+        X(syscalltest) \
 
 #define DECLARE(X) static int X(int, char *[]);
-
 APPS_X(DECLARE)
-
 #undef DECLARE
 
 static const struct app {
     const char *name;
-
     int (*fn)(int, char *[]);
 } app_list[] = {
 #define ELEM(X) { # X, X },
@@ -29,15 +28,26 @@ static const struct app {
 #undef ELEM
 };
 
+static int os_printf(const char *fmt, ...) {
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    return os_print(buf, ret);
+}
+
 static int echo(int argc, char *argv[]) {
     for (int i = 1; i < argc; ++i) {
         printf("%s%c", argv[i], i == argc - 1 ? '\n' : ' ');
     }
+    fflush(stdout);
     return argc - 1;
 }
 
 static int retcode(int argc, char *argv[]) {
     printf("%d\n", g_retcode);
+    fflush(stdout);
     return 0;
 }
 
@@ -69,15 +79,19 @@ static int pooltest(int argc, char *argv[]) {
 
     if (!strcmp(argv[1], "alloc")) {
         struct obj *o = pool_alloc(&objpool);
-        printf("alloc %ld\n", o ? (o - objmem) : -1);
+        printf("alloc %d\n", o ? (o - objmem) : -1);
         return 0;
-    }
-    else if (!strcmp(argv[1], "free")) {
+    } else if (!strcmp(argv[1], "free")) {
         int iobj = atoi(argv[2]);
         printf("free %d\n", iobj);
         pool_free(&objpool, objmem + iobj);
         return 0;
     }
+}
+
+static int syscalltest(int argc, char *argv[]) {
+    int r = os_printf("%s\n", argv[1]);
+    return r - 1;
 }
 
 int shell(int argc, char *argv[]) {
@@ -108,9 +122,4 @@ int shell(int argc, char *argv[]) {
         }
     }
     return 0;
-}
-
-
-int main(int argc, char *argv[]) {
-    shell(0, NULL);
 }
