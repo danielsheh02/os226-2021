@@ -91,7 +91,7 @@ static int bitmap_alloc(unsigned long *bitmap, size_t size) {
                 bitmap[i] |= bit;
                 return i * (sizeof(unsigned long) * CHAR_BIT) + offset;
             }
-            bit = bit / 2;
+            bit /= 2;
         }
     }
     return -1;
